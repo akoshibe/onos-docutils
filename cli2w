@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# Generates a wiki-formatted file from Karaf CLI command outputs.
+# This script is part of the (unofficial) ONOS documentation toolset.
+# 
+# Just add a TOC macro at top to link everything.
+# Assumed syntax is Confluence.
+#
+# TODO: generate HTML.
+
+function usage() {
+cat << EOF
+usage: $0 [ONOS instance]
+
+required:
+    [ONOS instance]   : the ONOS instance whose CLI to run against 
+
+Outputs a 1) wiki-formatted file from Karaf CLI command outputs and
+2) a list of Commands into a directory named \$OCI-c2w.
+
+EOF
+}
+
+# Formats the command into wiki syntax.
+function fmtcmd() {
+  local cmd=$1
+  local cn=$(echo $cmd | awk '{split($0,a,":"); print a[2]}')
+
+  # each command is Header3 
+  echo $'\n'"h3. $cn"
+  for i in $(onos $C2W_IN help $cmd); do
+    echo -n '&nbsp;&nbsp;&nbsp;&nbsp;'
+    if [[ $i = DESCRIPTION || $i = SYNTAX || 
+          $i = ARGUMENTS || $i = OPTIONS ]]; then
+      echo \*${i}\*
+    else 
+      # bold things that begin with -, --, and are single words indented once.
+      local l=$(echo $i | grep '^ \{8\}[a-zA-Z-]' | grep -v onos:)
+      [ "$l" ] && local str=\*${i}\*  
+      
+      # identation and printing
+      if [ "$l" ]; then
+        echo "$str" | sed -e 's:\(^\* \{8\}\)-:\1\\-:' -e 's: :\&nbsp;:g' 
+      else
+        echo $i | sed -e 's:\[:\\[:g' -e 's: :\&nbsp;:g' -e 's:	:\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;:g'
+      fi
+    fi
+  done
+}
+
+if [[ $1 = "-h" || -z $1 ]]; then 
+  usage && exit
+fi
+
+IFS=$'\n'
+OUTDIR=./${1}-c2w/
+
+# The ONOS instance to interrogate
+C2W_IN=$1
+# Output file name
+C2W_OUT=${OUTDIR}c2w
+# list of commands
+C2W_LIST=${OUTDIR}c2w-cmds
+
+mkdir $OUTDIR
+onos $C2W_IN help onos | grep -v COMMANDS | awk '{print $1}' > $C2W_LIST
+
+while read command; do
+  fmtcmd $command >> $C2W_OUT 
+done < $C2W_LIST
+
