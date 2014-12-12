@@ -59,13 +59,10 @@ OUTDIR=./${1}-c2w/
 C2W_IN=$1
 # Output file name
 C2W_OUT=${OUTDIR}c2w
-# list of commands
-C2W_LIST=${OUTDIR}c2w-cmds
 
 mkdir $OUTDIR
-onos $C2W_IN help onos | grep -v COMMANDS | awk '{print $1}' > $C2W_LIST
 
-while read command; do
+onos $C2W_IN help onos | grep -v COMMANDS | awk '{print $1}' | while read command; do
   fmtcmd $command >> $C2W_OUT 
-done < $C2W_LIST
+done
 

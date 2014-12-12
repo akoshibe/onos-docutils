@@ -1,0 +1,89 @@
+#!/usr/bin/env bash 
+# 
+# Scrapes JAX-RS -related methods and values from source and dumps it 
+# into a file. 
+#
+# This script is part of the (unofficial) ONOS documentation toolset. 
+#
+
+PARAMS=( '\@PathParam' '\@QueryParam' '\@DefaultValue' )
+IFS=$'\n'
+
+function usage() {
+cat << EOF
+usage $0 [project source]
+
+required:
+    [project source]    : project source directory
+
+Scrapes JAX-RS -related methods and values from source and dumps it
+into a file called s2r under ./[project]-s2r/. This file contains:
+
+  calltype: POST, GET, or DELETE
+  path_root: root URI for a class of calls
+  path: a URI
+  method: the Java method defining actions for a URI, which may have 
+          Query, path, or default parameters (shown if any exist)
+
+per file known to import javax.* packages.
+
+EOF
+}
+
+# Filters REST paths, call types, defaults, implementation methods
+function parserest() {
+
+  # for each delimited block, build paths, method and list of params
+  echo "FILE:" $1
+
+  cat $1 | grep '@Path\|@PathParam\|@QueryParam\|@DefaultValue\|@POST\|@DELETE\|@GET\|public.*(' | tr "()" "  " | while read l; do
+    case $l in
+      *'@POST'*|*'@DELETE'*|*'@GET'*|*'@PUT'*)
+        # call types
+        stype=$l
+        echo "calltype:" $l
+      ;; 
+      '    @Path'*)
+        # subsequent paths
+        spath=$(echo $l | sed 's:.*\"\(.*\)\".*:\1:g')
+        echo "path:" ${root}/${spath}
+      ;;
+      '@Path'*)
+        # path root
+        root=$(echo $l | sed 's:.*\"\(.*\)\".*:\1:g')
+        echo "path_root:" $root
+      ;;
+      *'Param'*)
+        # Path/QueryParam
+        mname=$(echo $l | awk '{print $3}')
+        [ "$mname" != "String" ] && echo "method:" $mname
+        methods=( $(echo $l | tr " " '\n') )
+        for i in $(seq 0 ${#methods[@]} ) ; do
+          param=$(echo "${PARAMS[@]}" | grep "${methods[${i}]}")
+          if [ "$param" ]; then
+            echo ${methods[${i}]} ${methods[$(($i + 1))]}
+          fi
+        done
+      ;;
+      *)
+        # method name.
+        echo "method:" $l 
+    esac
+  done 
+}
+
+if [[ $1 = "-h" || -z $1 ]]; then 
+  usage && exit
+fi
+
+S2R_SRC=$1
+OUTDIR=./$(echo ${1} | sed 's:[./]::g')-s2r/
+S2R_OUT=${OUTDIR}s2r
+
+mkdir ${OUTDIR}
+
+# extract REST bits from source
+grep -rn javax\.ws ${S2R_SRC} | grep java: | awk '{split($0,a,":"); print a[1]}' | uniq | while read l; do
+  parserest $l >> $S2R_OUT
+done
+
