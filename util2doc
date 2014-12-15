@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#
+# Finds and scrapes usage and description info from the onos util 
+# scripts. Assumes that they are bash scripts with a description as 
+# part of its commenting. 
+# 
+# This script is part of the (unofficial) ONOS documentation toolset. 
+#
+
+function usage() {
+cat << EOF
+
+usage: $0 [ONOS_ROOT]
+
+required:
+    [ONOS_ROOT]    : ONOS project source root directory
+
+Finds and scrapes usage and description info from the onos util scripts. 
+This script assumes that they are bash scripts with a description string
+provided betwreen dashed lines:
+
+# ----------------------------------------------------------------
+# Description goes here.
+# ----------------------------------------------------------------
+
+This script also looks for and prints potential command-line arguments,
+as hints at what the scripts expect/use as arguments, as well as the 
+aliases available as part of the dev environment profile.
+
+The results are placed in a file called u2d under./[project]-u2d:
+
+ * u2d - contents scraped from utility scripts
+ * aliases - dev environment bash aliases
+
+EOF
+}
+
+# parses out the description, flags of each script, and pushes
+# them to a file.
+function parsesh() {
+  # filename
+  echo $1
+  # get description
+  sed -ne '/# \-/,/# \-/ s:# -*::g p' < $l
+  echo ""
+  # and things printed by usage(), if such a thing exists
+  sed -ne '/function.*usage {/,/}/ s: *echo "\(.*\):\1:g p' < $l
+  echo ""
+  # flags and options. These fit the following criteria: 
+  # ${[1-9]} (or $[1-9])
+  # [a-zA-Z]) (getopts flags)
+  sed -ne '/"\{0,1\}${\{0,1\}[1-9]}\{0,1\}"\{0,1\}/ p' -ne '/^[^$[:alpha:]] *.)/ p' < $l
+  echo ""
+}
+
+[ -z "${1}" ] || [ "${1}" = "-h" ] && usage && exit
+
+U2D_SRC=$1
+OUTDIR=./$(echo ${1} | sed 's:[./]::g')-u2d/
+U2D_OUT=${OUTDIR}u2d
+ALIAS_OUT=${OUTDIR}aliases
+
+mkdir -p ${OUTDIR}
+
+grep -rn '#!.*bash' --include "onos*" --exclude-dir 'topos' ${U2D_SRC} | awk '{split($0,a,":"); print a[1]}' | while read l; do
+  parsesh $l >> ${U2D_OUT}
+done
+
+grep '\<alias\>' ${U2D_SRC}/tools/dev/bash_profile > ${ALIAS_OUT}

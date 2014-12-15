@@ -11,6 +11,7 @@ IFS=$'\n'
 
 function usage() {
 cat << EOF
+
 usage $0 [project source]
 
 required:
@@ -25,7 +26,7 @@ into a file called s2r under ./[project]-s2r/. This file contains:
   method: the Java method defining actions for a URI, which may have 
           Query, path, or default parameters (shown if any exist)
 
-per file known to import javax.* packages.
+for REST-related methods, per file known to import javax.* packages.
 
 EOF
 }
@@ -34,21 +35,21 @@ EOF
 function parserest() {
 
   # for each delimited block, build paths, method and list of params
-  echo "FILE:" $1
+  echo $'\n'"FILE:" $1
 
-  cat $1 | grep '@Path\|@PathParam\|@QueryParam\|@DefaultValue\|@POST\|@DELETE\|@GET\|public.*(' | tr "()" "  " | while read l; do
+  cat $1 | grep '@.*Path\|@.*PathParam\|@.*QueryParam\|@.*DefaultValue\|@.*POST\|@.*DELETE\|@.*GET\|public.*(' | tr "()" "  " | while read l; do
     case $l in
       *'@POST'*|*'@DELETE'*|*'@GET'*|*'@PUT'*)
         # call types
         stype=$l
         echo "calltype:" $l
       ;; 
-      '    @Path'*)
+      '    @Path'*|'    @javax.ws.rs.Path'*)
         # subsequent paths
-        spath=$(echo $l | sed 's:.*\"\(.*\)\".*:\1:g')
+        spath=$(echo $l | sed 's:.*\"\/*\(.*\)\".*:\1:g')
         echo "path:" ${root}/${spath}
       ;;
-      '@Path'*)
+      '@Path'*|'@javax.ws.rs.Path'*)
         # path root
         root=$(echo $l | sed 's:.*\"\(.*\)\".*:\1:g')
         echo "path_root:" $root
@@ -58,16 +59,14 @@ function parserest() {
         mname=$(echo $l | awk '{print $3}')
         [ "$mname" != "String" ] && echo "method:" $mname
         methods=( $(echo $l | tr " " '\n') )
-        for i in $(seq 0 ${#methods[@]} ) ; do
+        for i in ${!methods[@]} ; do
           param=$(echo "${PARAMS[@]}" | grep "${methods[${i}]}")
-          if [ "$param" ]; then
-            echo ${methods[${i}]} ${methods[$(($i + 1))]}
-          fi
+          [ "$param" ] && echo ${methods[${i}]} ${methods[$(($i + 1))]}
         done
       ;;
       *)
-        # method name.
-        echo "method:" $l 
+        # Public methods, which may or may not be associated with REST calls.
+        echo "method:" $l | sed 's:{::'
     esac
   done 
 }
@@ -76,7 +75,7 @@ if [[ $1 = "-h" || -z $1 ]]; then
   usage && exit
 fi
 
-S2R_SRC=$1
+S2R_SRC=${1}/web/
 OUTDIR=./$(echo ${1} | sed 's:[./]::g')-s2r/
 S2R_OUT=${OUTDIR}s2r
 

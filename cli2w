@@ -6,10 +6,11 @@
 # Just add a TOC macro at top to link everything.
 # Assumed syntax is Confluence.
 #
-# TODO: generate HTML.
+# TODO: generate HTML, and provide way to do individual commands.
 
 function usage() {
 cat << EOF
+
 usage: $0 [ONOS instance]
 
 required:
@@ -32,7 +33,7 @@ function fmtcmd() {
     echo -n '&nbsp;&nbsp;&nbsp;&nbsp;'
     if [[ $i = DESCRIPTION || $i = SYNTAX || 
           $i = ARGUMENTS || $i = OPTIONS ]]; then
-      echo \*${i}\*
+      echo "*${i}*"
     else 
       # bold things that begin with -, --, and are single words indented once.
       local l=$(echo $i | grep '^ \{8\}[a-zA-Z-]' | grep -v onos:)
@@ -53,16 +54,19 @@ if [[ $1 = "-h" || -z $1 ]]; then
 fi
 
 IFS=$'\n'
-OUTDIR=./${1}-c2w/
 
 # The ONOS instance to interrogate
-C2W_IN=$1
+C2W_IN=${1}
+OUTDIR=./${C2W_IN}-c2w/
 # Output file name
 C2W_OUT=${OUTDIR}c2w
 
 mkdir $OUTDIR
 
+#toc
+printf "%s\n" '{toc:printable=true|style=none|maxLevel=3|type=flat|outline=true|separator=brackets|include=.*}' >> ${C2W_OUT}
+
 onos $C2W_IN help onos | grep -v COMMANDS | awk '{print $1}' | while read command; do
-  fmtcmd $command >> $C2W_OUT 
+  fmtcmd $command >> ${C2W_OUT}
 done
 

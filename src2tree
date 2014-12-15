@@ -12,6 +12,7 @@
 
 function usage() {
 cat << EOF
+
 usage: $0 -i [project] [-c] [options]
 
 required:
@@ -90,10 +91,6 @@ while read line; do
   st=$(echo ${arr[@]} | sed 's:[a-zA-Z]*-*[a-zA-Z]* :*:g') 
   # tack another asterisk in front, plus a space : **c -> *** c
   echo \*${st} | sed 's:[a-zA-Z]: &:' >> $hier_out
-  #siz=${#arr[@]}
-  #if [ $siz -le $level ]; then
-  #      echo ${arr[@]} | sed 's:[a-z]* :	:g' | grep -v "src" >> $out
-  #fi
 done < /tmp/h_tmp
 
 # scrape package name and descriptions from pom.xml files, and bullet-point that
