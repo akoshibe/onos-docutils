@@ -7,6 +7,9 @@
 # This script is part of the (unofficial) ONOS documentation toolset. 
 #
 
+set -o pipefail
+IFS=$'\n'
+
 function usage() {
 cat << EOF
 
@@ -27,7 +30,7 @@ This script also looks for and prints potential command-line arguments,
 as hints at what the scripts expect/use as arguments, as well as the 
 aliases available as part of the dev environment profile.
 
-The results are placed in a file called u2d under./[project]-u2d:
+The results are the following, in a directory called u2d_out:
 
  * u2d - contents scraped from utility scripts
  * aliases - dev environment bash aliases
@@ -39,26 +42,23 @@ EOF
 # them to a file.
 function parsesh() {
   # filename
-  echo $1
+  printf "${1}:\n"
   # get description
-  sed -ne '/# \-/,/# \-/ s:# -*::g p' < $l
-  echo ""
+  printf "%s\n\n" "$(sed -ne '/# \-/,/# \-/ s:# -*::g p' < $l)"
   # and things printed by usage(), if such a thing exists
-  sed -ne '/function.*usage {/,/}/ s: *echo "\(.*\):\1:g p' < $l
-  echo ""
+  printf "%s\n\n" "$(sed -ne '/function.*usage {/,/}/ s: *echo "\(.*\):\1:g p' < $l)"
   # flags and options. These fit the following criteria: 
   # ${[1-9]} (or $[1-9])
   # [a-zA-Z]) (getopts flags)
-  sed -ne '/"\{0,1\}${\{0,1\}[1-9]}\{0,1\}"\{0,1\}/ p' -ne '/^[^$[:alpha:]] *.)/ p' < $l
-  echo ""
+  printf "%s\n\n" "$(sed -ne '/"\{0,1\}${\{0,1\}[1-9]}\{0,1\}"\{0,1\}/ p' -ne '/^[^$[:alpha:]] *.)/ p' < $l)"
 }
 
 [ -z "${1}" ] || [ "${1}" = "-h" ] && usage && exit
 
 U2D_SRC=$1
-OUTDIR=./$(echo ${1} | sed 's:[./]::g')-u2d/
-U2D_OUT=${OUTDIR}u2d
-ALIAS_OUT=${OUTDIR}aliases
+OUTDIR="u2d_out"
+U2D_OUT="${OUTDIR}/u2d"
+ALIAS_OUT="${OUTDIR}/aliases"
 
 mkdir -p ${OUTDIR}
 

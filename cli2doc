@@ -7,6 +7,11 @@
 #
 # TODO: generate HTML, and provide way to do individual commands.
 
+set -o pipefail
+IFS=$'\n'
+
+TAB='&nbsp;&nbsp;&nbsp;&nbsp;'
+
 function usage() {
 cat << EOF
 
@@ -16,7 +21,10 @@ required:
     [ONOS instance]   : the ONOS instance whose CLI to run against 
 
 Outputs a 1) wiki-formatted file from Karaf CLI command outputs and
-2) a list of Commands into a directory named \$OCI-c2w.
+2) a list of Commands into a file named c2d_out.
+
+Confluence wiki is not elegant about indentation, so expect a
+bunch of &nbsp;'s.
 
 EOF
 }
@@ -26,46 +34,47 @@ function fmtcmd() {
   local cmd=$1
   local cn=$(echo $cmd | awk '{split($0,a,":"); print a[2]}')
 
-  # each command is Header3 
-  echo $'\n'"h3. $cn"
+  # each command is Header3
+  printf "\nh3. %s\n" "${cn}"
+
+  # add font styles
   for i in $(onos $C2W_IN help $cmd); do
-    echo -n '&nbsp;&nbsp;&nbsp;&nbsp;'
-    if [[ $i = DESCRIPTION || $i = SYNTAX || 
+    printf "${TAB}"
+    if [[ $i = DESCRIPTION || $i = SYNTAX ||
           $i = ARGUMENTS || $i = OPTIONS ]]; then
-      echo "*${i}*"
+      printf "*%s*\n" "${i}"
     else 
       # bold things that begin with -, --, and are single words indented once.
       local l=$(echo $i | grep '^ \{8\}[a-zA-Z-]' | grep -v onos:)
-      [ "$l" ] && local str=\*${i}\*  
+      [ "$l" ] && local str="*${i}*"
       
       # identation and printing
       if [ "$l" ]; then
-        echo "$str" | sed -e 's:\(^\* \{8\}\)-:\1\\-:' -e 's: :\&nbsp;:g' 
+        printf "${str}\n" | sed -e 's:\(^\* \{8\}\)-:\1\\-:' -e 's: :\&nbsp;:g'
       else
-        echo $i | sed -e 's:\[:\\[:g' -e 's: :\&nbsp;:g' -e 's:	:\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;\&nbsp;:g'
+        printf "${i}\n" | sed -e 's:\[:\\[:g' -e 's: :\&nbsp;:g' -e 's:	:'${TAB}${TAB}':g'
       fi
     fi
   done
 }
 
-if [[ $1 = "-h" || -z $1 ]]; then 
-  usage && exit
+if [ "$1" = "-h" ] || [ -z "$1" ]; then
+  usage >&2 && exit
 fi
 
-IFS=$'\n'
 
 # The ONOS instance to interrogate
 C2W_IN=${1}
-OUTDIR=./${C2W_IN}-c2w/
 # Output file name
-C2W_OUT=${OUTDIR}c2w
-
-mkdir $OUTDIR
+C2W_OUT="c2d_out"
 
 #toc
-printf "%s\n" '{toc:printable=true|style=none|maxLevel=3|type=flat|outline=true|separator=brackets|include=.*}' >> ${C2W_OUT}
+printf "%s\n\n" '{toc:printable=true|style=none|maxLevel=3|type=flat|outline=true|separator=brackets|include=.*}' >> ${C2W_OUT}
 
-onos $C2W_IN help onos | grep -v COMMANDS | awk '{print $1}' | while read command; do
+onos ${C2W_IN} help onos | grep -v COMMANDS | awk '{print $1}' | while read command; do
+  printf "."
   fmtcmd $command >> ${C2W_OUT}
 done
+
+printf "done.\n"
 

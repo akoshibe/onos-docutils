@@ -7,18 +7,19 @@
 #
 
 PARAMS=( '\@PathParam' '\@QueryParam' '\@DefaultValue' )
+set -o pipefail
 IFS=$'\n'
 
 function usage() {
 cat << EOF
 
-usage $0 [project source]
+usage: $0 [ONOS_ROOT]
 
 required:
-    [project source]    : project source directory
+    -i [ONOS_ROOT]    : project source directory
 
 Scrapes JAX-RS -related methods and values from source and dumps it
-into a file called s2r under ./[project]-s2r/. This file contains:
+into a file called s2r_out. This file contains:
 
   calltype: POST, GET, or DELETE
   path_root: root URI for a class of calls
@@ -28,6 +29,8 @@ into a file called s2r under ./[project]-s2r/. This file contains:
 
 for REST-related methods, per file known to import javax.* packages.
 
+These outputs are not formatted, and are intended to be references.
+
 EOF
 }
 
@@ -35,54 +38,50 @@ EOF
 function parserest() {
 
   # for each delimited block, build paths, method and list of params
-  echo $'\n'"FILE:" $1
+  printf "\nFILE: %s\n" "$1"
 
   cat $1 | grep '@.*Path\|@.*PathParam\|@.*QueryParam\|@.*DefaultValue\|@.*POST\|@.*DELETE\|@.*GET\|public.*(' | tr "()" "  " | while read l; do
     case $l in
       *'@POST'*|*'@DELETE'*|*'@GET'*|*'@PUT'*)
         # call types
-        stype=$l
-        echo "calltype:" $l
+        printf "calltype: %s\n" "$l"
       ;; 
       '    @Path'*|'    @javax.ws.rs.Path'*)
         # subsequent paths
-        spath=$(echo $l | sed 's:.*\"\/*\(.*\)\".*:\1:g')
-        echo "path:" ${root}/${spath}
+        spath=$(printf "$l" | sed 's:.*\"\/*\(.*\)\".*:\1:g')
+        printf "path: %s\n" "${root}/${spath}"
       ;;
       '@Path'*|'@javax.ws.rs.Path'*)
         # path root
-        root=$(echo $l | sed 's:.*\"\(.*\)\".*:\1:g')
-        echo "path_root:" $root
+        root=$(printf "$l" | sed 's:.*\"\(.*\)\".*:\1:g')
+        printf "path_root: %s\n" "$root"
       ;;
       *'Param'*)
         # Path/QueryParam
-        mname=$(echo $l | awk '{print $3}')
+        mname=$(printf "$l" | awk '{print $3}')
         [ "$mname" != "String" ] && echo "method:" $mname
-        methods=( $(echo $l | tr " " '\n') )
+        methods=( $(printf "$l" | tr " " '\n') )
         for i in ${!methods[@]} ; do
           param=$(echo "${PARAMS[@]}" | grep "${methods[${i}]}")
-          [ "$param" ] && echo ${methods[${i}]} ${methods[$(($i + 1))]}
+          [ "$param" ] && printf "%s %s\n" "${methods[${i}]}" "${methods[$(($i + 1))]}"
         done
       ;;
       *)
         # Public methods, which may or may not be associated with REST calls.
-        echo "method:" $l | sed 's:{::'
+        printf "method: %s\n" "$l" | sed 's:{::'
     esac
   done 
 }
 
-if [[ $1 = "-h" || -z $1 ]]; then 
-  usage && exit
+if [ "$1" = "-h" ] || [ -z "$1" ]; then 
+  usage >&2 && exit
 fi
 
-S2R_SRC=${1}/web/
-OUTDIR=./$(echo ${1} | sed 's:[./]::g')-s2r/
-S2R_OUT=${OUTDIR}s2r
-
-mkdir ${OUTDIR}
+S2R_SRC="${1}/web/"
+S2R_OUT="s2r_out"
 
 # extract REST bits from source
-grep -rn javax\.ws ${S2R_SRC} | grep java: | awk '{split($0,a,":"); print a[1]}' | uniq | while read l; do
+grep --exclude '*.html' -r 'import javax' ${S2R_SRC} | awk '{split($0,a,":"); print a[1]}' | uniq | while read l; do
   parserest $l >> $S2R_OUT
 done
 

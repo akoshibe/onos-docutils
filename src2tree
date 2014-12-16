@@ -9,7 +9,7 @@
 # wiki-indented hierarchy goes into hier_out.
 # descriptions and package names go into pdescr_out and pname_out. 
 #
-# TODO: generate tables, also allow generation of HTML.
+# TODO: also allow generation of HTML.
 
 set -o pipefail
 IFS=$'\n'
@@ -24,34 +24,32 @@ required:
    
 options:
    -l [level]     : how many directory levels to scrape (defualt 3)
-   -n [filename]  : output results to [filename] (default hier_out)
+   -n [dirname]  : output results to [dirname] (default s2t_out)
+
+Produces wiki-formatted lists for directory structure and project 
+POM file hierarchy (project names and description if a POM file is
+found). The lists are written as three files in ./s2t_out:
+
+ * hier_out : the directory layout as indented list
+ * names : project names as indented list
+ * descrs : project descriptions as indented list 
 
 EOF
 }
 
-#function cleanup() {
-#  rm /tmp/h_tmp /tmp/p_tmp /tmp/p2_tmp
-#}
+function cleanup() {
+  rm /tmp/h_tmp
+}
                    
-#trap cleanup EXIT
+trap cleanup EXIT
 
 # argument parsing 
 while getopts ":i:l:n:" opt; do
   case $opt in
-    i)
-      treedir=$(echo $OPTARG | sed -e 's:[/]$::')
-      hier_out="hier_out"
-      ;;
-    l)
-      level=$OPTARG
-      ;;
-    n)
-      hier_out=$(echo ${OPTARG} | sed 's:[ /]::g')
-      ;;
-    \?)
-      usage
-      exit
-      ;;
+    i) treedir=$(printf "${OPTARG}" | sed 's:[/]$::') ;;
+    l) level=$OPTARG ;;
+    n) dir_out=$(printf "${OPTARG}" | sed 's:[ /]::g') ;;
+    \?) usage && exit ;;
   esac
 done
 
@@ -64,31 +62,34 @@ fi
 
 # set defaults if unset
 : ${level:=3}
+: ${dir_out:="./s2t_out"}
+
+# setup directory
+cwd=$(pwd)
+s2t_path="${cwd}/${dir_out}"
+mkdir -p ${s2t_path}
 
 # go to right below the project location to get consistency
-cwd=$(pwd)
-rdir=$(printf ${treedir} | sed -e 's:^[./]*::' -e 's:[[:alpha:]-]*/::g')
+rdir=$(printf "${treedir}" | sed -e 's:^[./]*::' -e 's:[[:alpha:]-]*/::g')
 cd ${treedir}; cd ..
 find ${rdir} -maxdepth $((${level} - 1)) -type d -not -path '*/\.*' | grep -v src | grep -v target | sort -d > /tmp/h_tmp
-echo `pwd`
 
 while read l; do
   # project name
-  project=$(printf ${l} | sed 's:[[:alpha:]-]*/::g')
+  project=$(printf "${l}" | sed 's:[[:alpha:]-]*/::g')
   # indentation
-  idt=$(printf ${l} | sed 's:[[:alpha:]-]*/\{0,1\}:*:g')
-  printf "%s %s\n" "${idt}" ${project} >> "${cwd}/${hier_out}"
+  idt=$(printf "${l}" | sed 's:[[:alpha:]-]*/\{0,1\}:*:g')
+  printf "%s %s\n" "${idt}" ${project} >> "${s2t_path}/hier_out"
 
   if [ -e "${l}/pom.xml" ]; then
-    # a project - parse its POM file
+    # a project - parse its POM file for project name and descrption
     pkn=$(grep -m2 '<artifactId>' "${l}/pom.xml" | tr $'\n' ' ')
     pkd=$(grep -m2 '</\{0,1\}description>' "${l}/pom.xml" | tr $'\n' ' ')
-    printf "%s\n" "${pkn} ${pkd}"
-    printf "%s\n" "${idt}${pkn} ${pkd}" | sed -n 's:\(**\).*<artifactId>\(.*\)</artifactId>.*:\1 \2:g p' >> /tmp/ht_name
-    printf "%s\n" "${idt}${pkn} ${pkd}" | sed -n 's:\(**\).*<description>\(.*\)</description>.*:\1 \2: p' >> /tmp/ht_descr
+    printf "%s\n" "${idt}${pkn} ${pkd}" | sed -n 's:\(**\).*<artifactId>\(.*\)</artifactId>.*:\1 \2:g p' >> "${s2t_path}/names"
+    printf "%s\n" "${idt}${pkn} ${pkd}" | sed -n 's:\(**\).*<description>\(.*\)</description>.*:\1 \2: p' >> "${s2t_path}/descrs"
   else
     # not a Maven project; fill fields with '-'
-    printf "%s\n" "${idt} -" | tee -a /tmp/ht_name /tmp/ht_descr 1>/dev/null
+    printf "%s\n" "${idt} -" | tee -a "${s2t_path}/names" "${s2t_path}/descrs" 1>/dev/null
   fi    
 done < /tmp/h_tmp
 
