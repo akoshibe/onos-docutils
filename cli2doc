@@ -3,7 +3,6 @@
 # Generates a wiki-formatted file from Karaf CLI command outputs.
 # This script is part of the (unofficial) ONOS documentation toolset.
 # 
-# Just add a TOC macro at top to link everything.
 # Assumed syntax is Confluence.
 #
 # TODO: generate HTML, and provide way to do individual commands.

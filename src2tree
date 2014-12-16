@@ -4,49 +4,49 @@
 # structure and be pasted into a wiki with a bit of elbowgrease.
 # This script is part of the (unofficial) ONOS documentation toolset.
 #
+# A wiki-formatted table is written to hier_out.
+#
 # wiki-indented hierarchy goes into hier_out.
 # descriptions and package names go into pdescr_out and pname_out. 
 #
-# TODO: generate HTML.
+# TODO: generate tables, also allow generation of HTML.
 
+set -o pipefail
+IFS=$'\n'
 
 function usage() {
 cat << EOF
 
-usage: $0 -i [project] [-c] [options]
+usage: $0 -i [ONOS_ROOT] [options]
 
 required:
-   -i [project]   : directory of project to inspect
+   -i [ONOS_ROOT] : root directory of project to inspect
    
 options:
    -l [level]     : how many directory levels to scrape (defualt 3)
-   -n [name]      : output results to directory [name] (default ./[project]-tree/)
+   -n [filename]  : output results to [filename] (default hier_out)
 
 EOF
 }
 
-# To-be implemented.
-#   -e [r_opt]     : edit(open) the results for an inspected project in $EDITOR.
-#
-#                    r_opt may be:
-#                        hier    : project hierarchy
-#                        name    : project names
-#                        descr   : project descriptions 
+#function cleanup() {
+#  rm /tmp/h_tmp /tmp/p_tmp /tmp/p2_tmp
+#}
                    
-OUT_DIR=./
+#trap cleanup EXIT
 
 # argument parsing 
 while getopts ":i:l:n:" opt; do
   case $opt in
     i)
-      treedir=$(echo $OPTARG | sed 's:[/]$::')
-      OUT_DIR=${OUT_DIR}$( echo $treedir | sed 's:\.\.::g')-tree/
+      treedir=$(echo $OPTARG | sed -e 's:[/]$::')
+      hier_out="hier_out"
       ;;
     l)
       level=$OPTARG
       ;;
     n)
-      OUT_DIR=$(echo ${OPTARG} | sed 's:$:/:')
+      hier_out=$(echo ${OPTARG} | sed 's:[ /]::g')
       ;;
     \?)
       usage
@@ -57,66 +57,39 @@ done
 
 # sanity check
 if [ -z $treedir ]; then
-  echo "must specify a project directory"
-  echo ""
-  usage
+  printf "%s\n" "must specify a project directory" >&2
+  usage >&2
   exit
 fi
 
 # set defaults if unset
 : ${level:=3}
-: ${hier_out:=${OUT_DIR}hier_out}
-: ${pname_out:=${OUT_DIR}pkname_out}
-: ${pdescr_out:=${OUT_DIR}pkdescr_out}
 
-#create directory if nonexistent
-mkdir -p $OUT_DIR
+# go to right below the project location to get consistency
+cwd=$(pwd)
+rdir=$(printf ${treedir} | sed -e 's:^[./]*::' -e 's:[[:alpha:]-]*/::g')
+cd ${treedir}; cd ..
+find ${rdir} -maxdepth $((${level} - 1)) -type d -not -path '*/\.*' | grep -v src | grep -v target | sort -d > /tmp/h_tmp
+echo `pwd`
 
-# collect up to $level of visible directory names
-find $treedir -maxdepth $((${level} - 1)) -type d -not -path '*/\.*' | grep -v src | grep -v target | sort -d > /tmp/h_tmp
-# collect all poms up to that level
-find $treedir -maxdepth ${level} -name pom.xml > /tmp/p_tmp
-# sort and reconstruct path in a greusomely hack way. 
-sed 's:pom.xml: pom.xml:g' </tmp/p_tmp > /tmp/p2_tmp
-sort -k 1 /tmp/p2_tmp -o /tmp/p2_tmp
-sed 's: pom.xml:pom.xml:g' </tmp/p2_tmp > /tmp/p_tmp
+while read l; do
+  # project name
+  project=$(printf ${l} | sed 's:[[:alpha:]-]*/::g')
+  # indentation
+  idt=$(printf ${l} | sed 's:[[:alpha:]-]*/\{0,1\}:*:g')
+  printf "%s %s\n" "${idt}" ${project} >> "${cwd}/${hier_out}"
 
-# spit slash-separated dirpaths into arrays, then replace all 
-# but last with wiki notation list bullet
-# Ex: /a/b/c -> [a b c] -> ** c
-while read line; do
-  # split directory into array: ./a/b/c -> a b c
-  arr=($(echo $line | sed 's:[./]: :g'))
-  # replace all but last entry with asterisks
-  st=$(echo ${arr[@]} | sed 's:[a-zA-Z]*-*[a-zA-Z]* :*:g') 
-  # tack another asterisk in front, plus a space : **c -> *** c
-  echo \*${st} | sed 's:[a-zA-Z]: &:' >> $hier_out
+  if [ -e "${l}/pom.xml" ]; then
+    # a project - parse its POM file
+    pkn=$(grep -m2 '<artifactId>' "${l}/pom.xml" | tr $'\n' ' ')
+    pkd=$(grep -m2 '</\{0,1\}description>' "${l}/pom.xml" | tr $'\n' ' ')
+    printf "%s\n" "${pkn} ${pkd}"
+    printf "%s\n" "${idt}${pkn} ${pkd}" | sed -n 's:\(**\).*<artifactId>\(.*\)</artifactId>.*:\1 \2:g p' >> /tmp/ht_name
+    printf "%s\n" "${idt}${pkn} ${pkd}" | sed -n 's:\(**\).*<description>\(.*\)</description>.*:\1 \2: p' >> /tmp/ht_descr
+  else
+    # not a Maven project; fill fields with '-'
+    printf "%s\n" "${idt} -" | tee -a /tmp/ht_name /tmp/ht_descr 1>/dev/null
+  fi    
 done < /tmp/h_tmp
 
-# scrape package name and descriptions from pom.xml files, and bullet-point that
-# the correct number of indentations in
-# Ex: ./a/b/pom.xml: a-package-name -> ** a-package-name
-#     "some package that does junk" -> ** some package that does junk
-while read line; do
-  #lines are /a/b/c/pom.xml
-  #fetch second match, if not, the first, and grab stuff between XML tags
-  if [ "$(grep -rn "parent" $line)" ]; then 
-    pname=$(grep -hrnm 2 "artifactId" $line | tail -n 1 | sed 's:.*<artifactId>\(.*\)<\/artifactId>:\1:')
-  else
-    pname=$(grep -hrnm 1 "artifactId" $line | sed 's:.*<artifactId>\(.*\)<\/artifactId>:\1:')
-  fi
-  pdescr=$(grep -hrn "description" $line | tr '\n' ' ' | sed 's:.*<description>\(.*\)<\/description>.*:\1:') 
-  
-  #make an array and make that number of stars
-  arr=($(echo $line | sed 's:\/: :g'))
-  str=$(echo ${arr[@]} | sed -e 's:[A-Za-z]*-*[A-Za-z]* :*:g' -e 's:\(\**\).*:\1:')
-  echo $line >> /tmp/pname_raw
-  echo "${str}" ${pname} >> $pname_out
-  echo "${str}" ${pdescr} >> $pdescr_out
-done < /tmp/p_tmp
-
-# tack path info to end
-echo "---debug--- " | tee -a $pname_out $pdescr_out 
-cat /tmp/pname_raw | tee -a $pname_out $pdescr_out 
-
-rm /tmp/pname_raw /tmp/h_tmp /tmp/p_tmp /tmp/p2_tmp
+cd ${cwd}
