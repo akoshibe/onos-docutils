@@ -25,4 +25,6 @@ onos-docutils currently contains the following:
              take, into a single file for reference (see Appendix A : List of
              ONOS Utility Scripts)
 
-Each script comes with its own usage information when given the -h option.
+Each script comes with its own usage information displayed by the -h option.
+
+Like ONOS itself, these scripts are technically licensed under Apache v2.0.
