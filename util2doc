@@ -33,7 +33,7 @@ aliases available as part of the dev environment profile.
 The results are the following, in a directory called u2d_out:
 
  * u2d - contents scraped from utility scripts
- * aliases - dev environment bash aliases
+ * aliases - dev environment bash aliases in wiki table format
 
 EOF
 }
@@ -66,4 +66,10 @@ grep -rn '#!.*bash' --include "onos*" --exclude-dir 'topos' ${U2D_SRC} | awk '{s
   parsesh $l >> ${U2D_OUT}
 done
 
-grep '\<alias\>' ${U2D_SRC}/tools/dev/bash_profile > ${ALIAS_OUT}
+printf "||alias||command||\n" >> ${ALIAS_OUT}
+grep '\<alias\>' ${U2D_SRC}/tools/dev/bash_profile | while read l; do
+  printf "%s\n" $l | sed -e 's:|:\&#124;:g' \
+                         -e 's:alias:|:' \
+                         -e 's:=: | :' \
+                         -e 's:$:& |:' >> ${ALIAS_OUT}
+done
